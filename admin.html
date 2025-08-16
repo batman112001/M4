@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Admin Panel</title>
+  <link rel="stylesheet" href="style.css"/>
+</head>
+<body class="center">
+  <div class="card" style="max-width:520px;">
+    <h2>Admin – Upload File Mapping</h2>
+    <input id="fileId" placeholder="Enter File ID (e.g., M5a)" />
+    <input id="fileUrl" placeholder="Enter Direct File URL" />
+    <button id="saveBtn">Save</button>
+    <p id="status"></p>
+  </div>
+
+  <script>
+    const btn = document.getElementById('saveBtn');
+    btn.addEventListener('click', async () => {
+      const id = document.getElementById('fileId').value.trim();
+      const url = document.getElementById('fileUrl').value.trim();
+      if (!id || !url) {
+        alert("Fill all fields");
+        return;
+      }
+      const res = await fetch('/api/files', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id, url })
+      });
+      const data = await res.json();
+      document.getElementById('status').textContent = data.message || data.error;
+      if (res.ok) {
+        const link = `${location.origin}/downloads.html?id=${id}`;
+        document.getElementById('status').innerHTML += `<br>🔗 User link: <a href="${link}" target="_blank">${link}</a>`;
+      }
+    });
+  </script>
+</body>
+</html>
