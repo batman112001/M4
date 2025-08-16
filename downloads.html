@@ -9,12 +9,9 @@
 <body>
   <div class="container">
     <h2>🔑 Secure File Download</h2>
-    <p>Enter the File ID (from admin) and the ZIP password to extract.</p>
-
     <input type="text" id="fileId" placeholder="Enter File ID">
     <input type="password" id="password" placeholder="Enter ZIP Password">
     <button onclick="startDownload()">Download & Extract</button>
-
     <div id="status"></div>
   </div>
 
@@ -32,19 +29,24 @@
       status.textContent = "⬇️ Fetching file...";
 
       try {
-        // 1. Fetch file through proxy
+        // 1. Get file URL from API
+        let metaRes = await fetch(`/api/file?id=${fileId}`);
+        let meta = await metaRes.json();
+        if (!meta.url) throw new Error("File ID not found");
+
+        // 2. Fetch actual file via proxy
         let res = await fetch(`/api/proxy?id=${fileId}`);
         if (!res.ok) throw new Error("File fetch failed");
 
         let blob = await res.blob();
         let arrayBuffer = await blob.arrayBuffer();
 
-        // 2. Load & decrypt ZIP
+        // 3. Load & decrypt ZIP
         status.textContent = "🔓 Decrypting ZIP...";
         let zip = new JSZip();
         await zip.loadAsync(arrayBuffer, { password });
 
-        // 3. Extract & auto-download files
+        // 4. Extract & auto-download files
         status.textContent = "📂 Extracting files...";
         let files = Object.keys(zip.files);
 
