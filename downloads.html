@@ -1,44 +1,48 @@
-<script src="https://gildas-lormeau.github.io/zip.js/demos/zip-no-worker.min.js"></script>
-<script>
-async function downloadAndExtract(fileId, password) {
-  try {
-    // Step 1: fetch file URL from KV
-    const res = await fetch(`/api/file?id=${fileId}`);
-    const { url } = await res.json();
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Download Page</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <h2>Download Your File</h2>
+  <input type="password" id="zipPassword" placeholder="Enter ZIP password">
+  <button id="downloadBtn">Download</button>
 
-    // Step 2: proxy download
-    const proxyRes = await fetch(`/api/proxy?url=${encodeURIComponent(url)}`);
-    if (!proxyRes.ok) throw new Error("Failed to fetch file");
-    const blob = await proxyRes.blob();
+  <script>
+    const params = new URLSearchParams(window.location.search);
+    const fileId = params.get("id");
 
-    // Step 3: open ZIP with password
-    const reader = new zip.ZipReader(new zip.BlobReader(blob));
-    const entries = await reader.getEntries();
+    document.getElementById("downloadBtn").addEventListener("click", async () => {
+      const password = document.getElementById("zipPassword").value.trim();
+      if (!password) return alert("Enter a password first!");
 
-    for (let entry of entries) {
-      if (entry.filename.endsWith("/")) continue; // skip folders
+      try {
+        const res = await fetch("/api/unzip", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ fileId, password })
+        });
 
-      const writer = new zip.BlobWriter();
-      const extracted = await entry.getData(writer, { password });
-      const fileBlob = await extracted;
+        if (!res.ok) {
+          const text = await res.text();
+          throw new Error(text);
+        }
 
-      // Offer download to user
-      const link = document.createElement("a");
-      link.href = URL.createObjectURL(fileBlob);
-      link.download = entry.filename;
-      link.click();
-    }
+        // download blob
+        const blob = await res.blob();
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = "file"; // filename comes from header
+        a.click();
+        window.URL.revokeObjectURL(url);
 
-    await reader.close();
-  } catch (err) {
-    alert("❌ Extraction failed: " + err.message);
-  }
-}
-
-// Example: after user enters fileId + password
-document.getElementById("downloadBtn").addEventListener("click", () => {
-  const fileId = document.getElementById("fileId").value.trim();
-  const password = document.getElementById("zipPass").value.trim();
-  downloadAndExtract(fileId, password);
-});
-</script>
+      } catch (err) {
+        alert("❌ " + err.message);
+      }
+    });
+  </script>
+</body>
+</html>
