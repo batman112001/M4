@@ -1,153 +1,67 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8"/>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <meta charset="UTF-8">
   <title>Download & Extract</title>
-  <link rel="stylesheet" href="style.css"/>
+  <link rel="stylesheet" href="style.css">
+  <script src="https://cdn.jsdelivr.net/npm/fflate/umd/index.js"></script>
 </head>
-<body class="center">
-  <div class="card" style="max-width:520px;">
-    <h2>Secure Download</h2>
-    <p id="status">Preparing…</p>
-
-    <div id="controls" style="display:none">
-      <p><strong>File:</strong> <span id="fileId"></span></p>
-      <input id="password" type="password" placeholder="Enter ZIP password" />
-      <button id="downloadExtract">Download & Extract</button>
-      <p id="note" style="font-size:13px;color:#555; margin-top:8px;">
-        Tip: If your browser supports it, you'll be asked to pick a folder to save extracted files.
-      </p>
-    </div>
-
-    <div id="result" style="display:none">
-      <p id="doneMsg" style="color:green;"></p>
-    </div>
+<body>
+  <div id="download-container">
+    <h2>Download File</h2>
+    <input type="text" id="fileId" placeholder="Enter file ID (e.g., M5a)">
+    <button id="fetchBtn">Fetch & Download</button>
   </div>
 
-  <!-- zip.js (AES-encrypted ZIP support) -->
-  <script type="module">
-    import * as zip from 'https://cdn.jsdelivr.net/npm/@zip.js/zip.js@2.7.28/dist/zip.min.js';
+  <script>
+    const fetchBtn = document.getElementById("fetchBtn");
 
-    const statusEl = document.getElementById('status');
-    const controls = document.getElementById('controls');
-    const fileIdEl = document.getElementById('fileId');
-    const btn = document.getElementById('downloadExtract');
-    const pwEl = document.getElementById('password');
-    const result = document.getElementById('result');
-    const doneMsg = document.getElementById('doneMsg');
-
-    const params = new URLSearchParams(location.search);
-    const id = params.get('id');
-
-    if (!id) {
-      statusEl.textContent = 'No file id provided.';
-    } else {
-      fileIdEl.textContent = id;
-      init();
-    }
-
-    async function init() {
-      try {
-        // 1) Get the real URL for this id
-        const metaRes = await fetch(`/api/file?id=${encodeURIComponent(id)}`);
-        const meta = await metaRes.json();
-        if (!metaRes.ok) {
-          statusEl.textContent = meta.error || 'File not found.';
-          return;
-        }
-        const fileUrl = meta.url;
-
-        // Show controls now that we have URL
-        statusEl.textContent = 'Ready.';
-        controls.style.display = 'block';
-
-        // 2) When user clicks, fetch the ZIP through proxy, then extract with password
-        btn.addEventListener('click', async () => {
-          const password = pwEl.value;
-          if (!password) {
-            alert('Please enter the ZIP password');
-            return;
-          }
-          btn.disabled = true;
-          statusEl.textContent = 'Downloading ZIP…';
-
-          try {
-            // Proxy fetch to bypass CORS
-            const zipRes = await fetch(`/api/proxy?url=${encodeURIComponent(fileUrl)}`);
-            if (!zipRes.ok) throw new Error(`Download failed: ${zipRes.status}`);
-            const zipBlob = await zipRes.blob();
-
-            statusEl.textContent = 'Decrypting & extracting…';
-
-            // Prepare zip.js reader with AES password
-            const reader = new zip.ZipReader(new zip.BlobReader(zipBlob), {
-              password: password,
-              useWebWorkers: true
-            });
-
-            const entries = await reader.getEntries();
-            if (!entries.length) throw new Error('Empty ZIP or unable to read entries');
-
-            // If supported, let user pick a folder (File System Access API)
-            let dirHandle = null;
-            const canPickDir = 'showDirectoryPicker' in window;
-
-            if (canPickDir) {
-              try {
-                dirHandle = await window.showDirectoryPicker();
-              } catch (e) {
-                // user canceled; fallback to individual downloads
-              }
-            }
-
-            let savedCount = 0;
-
-            for (const entry of entries) {
-              if (entry.directory) continue;
-
-              // get blob for each file
-              const blob = await entry.getData(new zip.BlobWriter());
-              const filename = entry.filename.split('/').pop();
-
-              if (dirHandle) {
-                // Save directly to chosen folder
-                const fileHandle = await dirHandle.getFileHandle(filename, { create: true });
-                const writable = await fileHandle.createWritable();
-                await writable.write(blob);
-                await writable.close();
-              } else {
-                // Fallback: trigger download for each file
-                const url = URL.createObjectURL(blob);
-                const a = document.createElement('a');
-                a.href = url;
-                a.download = filename || 'file';
-                document.body.appendChild(a);
-                a.click();
-                a.remove();
-                URL.revokeObjectURL(url);
-              }
-              savedCount++;
-            }
-
-            await reader.close(); // close and free resources
-
-            // "Delete temp" – we simply drop references to the ZIP blob
-            // and zip.js closes the reader above. Browser GC cleans it up.
-            doneMsg.textContent = `✅ Extracted ${savedCount} file(s).`;
-            result.style.display = 'block';
-            statusEl.textContent = 'Done.';
-          } catch (err) {
-            console.error(err);
-            statusEl.textContent = '❌ Extract failed. Wrong password or unsupported ZIP.';
-            btn.disabled = false;
-          }
-        });
-      } catch (e) {
-        console.error(e);
-        statusEl.textContent = 'Error preparing download.';
+    fetchBtn.addEventListener("click", async () => {
+      const fileId = document.getElementById("fileId").value.trim();
+      if (!fileId) {
+        alert("Enter a file ID first!");
+        return;
       }
-    }
+
+      try {
+        // Step 1: Get the file link from your API
+        const res = await fetch(`/api/file?id=${encodeURIComponent(fileId)}`);
+        if (!res.ok) throw new Error("File not found!");
+        const data = await res.json();
+        const fileUrl = data.url;
+
+        // Step 2: Ask for password
+        const password = prompt("Enter ZIP password:");
+        if (!password) return;
+
+        // Step 3: Fetch ZIP via proxy
+        const zipRes = await fetch(`/api/proxy?url=${encodeURIComponent(fileUrl)}`);
+        if (!zipRes.ok) throw new Error("Failed to fetch ZIP");
+        const zipArrayBuffer = await zipRes.arrayBuffer();
+
+        // Step 4: Decrypt + extract
+        const zipBytes = new Uint8Array(zipArrayBuffer);
+        const unzipped = fflate.unzipSync(zipBytes, { password: password });
+
+        // Step 5: Auto-download extracted files
+        for (const [filename, content] of Object.entries(unzipped)) {
+          const blob = new Blob([content], { type: "application/octet-stream" });
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement("a");
+          a.href = url;
+          a.download = filename;
+          document.body.appendChild(a);
+          a.click();
+          a.remove();
+          URL.revokeObjectURL(url);
+        }
+
+        alert("✅ Extraction complete. Files downloaded.");
+      } catch (err) {
+        console.error(err);
+        alert("❌ Error: " + err.message);
+      }
+    });
   </script>
 </body>
 </html>
