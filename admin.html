@@ -6,59 +6,46 @@
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
-  <div id="login-container">
-    <h2>Admin Login</h2>
-    <input type="password" id="adminPass" placeholder="Enter admin password">
-    <button id="loginBtn">Login</button>
-  </div>
-
-  <div id="upload-container" style="display:none;">
-    <h2>Upload File</h2>
-    <input type="text" id="fileId" placeholder="File ID">
-    <input type="text" id="fileUrl" placeholder="Google Drive Direct URL">
-    <button id="uploadBtn">Save File</button>
-    <div id="result"></div>
+  <div class="container">
+    <h2>🔐 Admin Panel</h2>
+    <input type="password" id="password" placeholder="Enter Admin Password">
+    <input type="text" id="fileId" placeholder="File ID (e.g. M5a)">
+    <input type="text" id="fileUrl" placeholder="File URL (Google Drive direct link)">
+    <button onclick="addFile()">Add File</button>
+    <div id="status"></div>
   </div>
 
   <script>
-    const loginBtn = document.getElementById("loginBtn");
-    const loginContainer = document.getElementById("login-container");
-    const uploadContainer = document.getElementById("upload-container");
+    async function addFile() {
+      const password = document.getElementById("password").value;
+      const id = document.getElementById("fileId").value.trim();
+      const url = document.getElementById("fileUrl").value.trim();
+      const status = document.getElementById("status");
 
-    loginBtn.addEventListener("click", () => {
-      const pass = document.getElementById("adminPass").value.trim();
-      // Send password with test fetch
-      fetch("/api/files", {
-        headers: { "X-Admin-Password": pass }
-      }).then(r => {
-        if (r.status === 401) {
-          alert("❌ Wrong admin password!");
+      if (!id || !url) {
+        alert("❌ Enter both File ID and URL");
+        return;
+      }
+
+      status.textContent = "⏳ Adding...";
+
+      try {
+        let res = await fetch("/api/files", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ password, id, url })
+        });
+
+        let data = await res.json();
+        if (res.ok) {
+          status.textContent = `✅ File ${id} added! Share downloads.html with ID.`;
         } else {
-          // Success: reveal admin UI
-          localStorage.setItem("adminPass", pass);
-          loginContainer.style.display = "none";
-          uploadContainer.style.display = "block";
+          status.textContent = "❌ " + data.error;
         }
-      });
-    });
-
-    document.getElementById("uploadBtn").addEventListener("click", async () => {
-      const fileId = document.getElementById("fileId").value.trim();
-      const fileUrl = document.getElementById("fileUrl").value.trim();
-      const pass = localStorage.getItem("adminPass");
-
-      const res = await fetch("/api/files", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "X-Admin-Password": pass
-        },
-        body: JSON.stringify({ id: fileId, url: fileUrl })
-      });
-
-      const data = await res.text();
-      document.getElementById("result").innerText = data;
-    });
+      } catch (err) {
+        status.textContent = "❌ Error: " + err.message;
+      }
+    }
   </script>
 </body>
 </html>
