@@ -1,40 +1,63 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8"/>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <meta charset="UTF-8">
   <title>Admin Panel</title>
-  <link rel="stylesheet" href="style.css"/>
+  <link rel="stylesheet" href="style.css">
 </head>
-<body class="center">
-  <div class="card" style="max-width:520px;">
-    <h2>Admin – Upload File Mapping</h2>
-    <input id="fileId" placeholder="Enter File ID (e.g., M5a)" />
-    <input id="fileUrl" placeholder="Enter Direct File URL" />
-    <button id="saveBtn">Save</button>
-    <p id="status"></p>
+<body>
+  <div id="login-container">
+    <h2>Admin Login</h2>
+    <input type="password" id="adminPass" placeholder="Enter admin password">
+    <button id="loginBtn">Login</button>
+  </div>
+
+  <div id="upload-container" style="display:none;">
+    <h2>Upload File</h2>
+    <input type="text" id="fileId" placeholder="File ID">
+    <input type="text" id="fileUrl" placeholder="Google Drive Direct URL">
+    <button id="uploadBtn">Save File</button>
+    <div id="result"></div>
   </div>
 
   <script>
-    const btn = document.getElementById('saveBtn');
-    btn.addEventListener('click', async () => {
-      const id = document.getElementById('fileId').value.trim();
-      const url = document.getElementById('fileUrl').value.trim();
-      if (!id || !url) {
-        alert("Fill all fields");
-        return;
-      }
-      const res = await fetch('/api/files', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id, url })
+    const loginBtn = document.getElementById("loginBtn");
+    const loginContainer = document.getElementById("login-container");
+    const uploadContainer = document.getElementById("upload-container");
+
+    loginBtn.addEventListener("click", () => {
+      const pass = document.getElementById("adminPass").value.trim();
+      // Send password with test fetch
+      fetch("/api/files", {
+        headers: { "X-Admin-Password": pass }
+      }).then(r => {
+        if (r.status === 401) {
+          alert("❌ Wrong admin password!");
+        } else {
+          // Success: reveal admin UI
+          localStorage.setItem("adminPass", pass);
+          loginContainer.style.display = "none";
+          uploadContainer.style.display = "block";
+        }
       });
-      const data = await res.json();
-      document.getElementById('status').textContent = data.message || data.error;
-      if (res.ok) {
-        const link = `${location.origin}/downloads.html?id=${id}`;
-        document.getElementById('status').innerHTML += `<br>🔗 User link: <a href="${link}" target="_blank">${link}</a>`;
-      }
+    });
+
+    document.getElementById("uploadBtn").addEventListener("click", async () => {
+      const fileId = document.getElementById("fileId").value.trim();
+      const fileUrl = document.getElementById("fileUrl").value.trim();
+      const pass = localStorage.getItem("adminPass");
+
+      const res = await fetch("/api/files", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Admin-Password": pass
+        },
+        body: JSON.stringify({ id: fileId, url: fileUrl })
+      });
+
+      const data = await res.text();
+      document.getElementById("result").innerText = data;
     });
   </script>
 </body>
