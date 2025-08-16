@@ -2,47 +2,68 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Download Page</title>
+  <title>Download & Extract</title>
   <link rel="stylesheet" href="style.css">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.7.1/jszip.min.js"></script>
 </head>
 <body>
-  <h2>Download Your File</h2>
-  <input type="password" id="zipPassword" placeholder="Enter ZIP password">
-  <button id="downloadBtn">Download</button>
+  <div class="container">
+    <h2>🔑 Secure File Download</h2>
+    <p>Enter the File ID (from admin) and the ZIP password to extract.</p>
+
+    <input type="text" id="fileId" placeholder="Enter File ID">
+    <input type="password" id="password" placeholder="Enter ZIP Password">
+    <button onclick="startDownload()">Download & Extract</button>
+
+    <div id="status"></div>
+  </div>
 
   <script>
-    const params = new URLSearchParams(window.location.search);
-    const fileId = params.get("id");
+    async function startDownload() {
+      const fileId = document.getElementById("fileId").value.trim();
+      const password = document.getElementById("password").value.trim();
+      const status = document.getElementById("status");
 
-    document.getElementById("downloadBtn").addEventListener("click", async () => {
-      const password = document.getElementById("zipPassword").value.trim();
-      if (!password) return alert("Enter a password first!");
+      if (!fileId || !password) {
+        alert("❌ Enter both File ID and Password");
+        return;
+      }
+
+      status.textContent = "⬇️ Fetching file...";
 
       try {
-        const res = await fetch("/api/unzip", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ fileId, password })
-        });
+        // 1. Fetch file through proxy
+        let res = await fetch(`/api/proxy?id=${fileId}`);
+        if (!res.ok) throw new Error("File fetch failed");
 
-        if (!res.ok) {
-          const text = await res.text();
-          throw new Error(text);
+        let blob = await res.blob();
+        let arrayBuffer = await blob.arrayBuffer();
+
+        // 2. Load & decrypt ZIP
+        status.textContent = "🔓 Decrypting ZIP...";
+        let zip = new JSZip();
+        await zip.loadAsync(arrayBuffer, { password });
+
+        // 3. Extract & auto-download files
+        status.textContent = "📂 Extracting files...";
+        let files = Object.keys(zip.files);
+
+        for (let filename of files) {
+          let content = await zip.files[filename].async("blob");
+          let link = document.createElement("a");
+          link.href = URL.createObjectURL(content);
+          link.download = filename;
+          link.style.display = "none";
+          document.body.appendChild(link);
+          link.click();
+          document.body.removeChild(link);
         }
 
-        // download blob
-        const blob = await res.blob();
-        const url = window.URL.createObjectURL(blob);
-        const a = document.createElement("a");
-        a.href = url;
-        a.download = "file"; // filename comes from header
-        a.click();
-        window.URL.revokeObjectURL(url);
-
+        status.textContent = "✅ Extraction complete! Files downloaded.";
       } catch (err) {
-        alert("❌ " + err.message);
+        status.textContent = "❌ Error: " + err.message;
       }
-    });
+    }
   </script>
 </body>
 </html>
