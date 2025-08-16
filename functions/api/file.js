@@ -1,10 +1,15 @@
 export async function onRequestGet({ request, env }) {
-  const { FILES_M4 } = env;   // changed
-  const id = new URL(request.url).searchParams.get("id");
-  if (!id) return Response.json({ error: "Missing id" }, { status: 400 });
+  const { searchParams } = new URL(request.url);
+  const id = searchParams.get("id");
 
-  const url = await FILES_M4.get(id);
-  if (!url) return Response.json({ error: "Not found" }, { status: 404 });
+  if (!id) {
+    return new Response(JSON.stringify({ error: "Missing id" }), { status: 400 });
+  }
 
-  return Response.json({ id, url });
+  const url = await env.FILES_M4.get(id);
+  if (!url) {
+    return new Response(JSON.stringify({ error: "File not found" }), { status: 404 });
+  }
+
+  return new Response(JSON.stringify({ id, url }), { status: 200 });
 }
