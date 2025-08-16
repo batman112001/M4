@@ -1,26 +1,19 @@
-export async function onRequest({ request, env }) {
-  const { FILES_M4 } = env;   // changed
-  const url = new URL(request.url);
+export async function onRequestPost({ request, env }) {
+  const { password, id, url } = await request.json();
 
-  if (request.method === "GET") {
-    const list = await FILES_M4.list();
-    const out = {};
-    for (const k of list.keys) {
-      out[k.name] = await FILES_M4.get(k.name);
-    }
-    return Response.json(out);
+  if (password !== env.ADMIN_PASSWORD) {
+    return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401 });
   }
 
-  if (request.method === "POST") {
-    try {
-      const { id, url } = await request.json();
-      if (!id || !url) return Response.json({ error: "Missing fields" }, { status: 400 });
-      await FILES_M4.put(id, url);
-      return Response.json({ message: `File "${id}" added!` });
-    } catch (e) {
-      return Response.json({ error: e.message }, { status: 500 });
-    }
+  if (!id || !url) {
+    return new Response(JSON.stringify({ error: "Missing id or url" }), { status: 400 });
   }
 
-  return Response.json({ error: "Method not allowed" }, { status: 405 });
+  await env.FILES_M4.put(id, url);
+  return new Response(JSON.stringify({ success: true, id, url }), { status: 200 });
+}
+
+export async function onRequestGet({ env }) {
+  const list = await env.FILES_M4.list();
+  return new Response(JSON.stringify(list.keys), { status: 200 });
 }
