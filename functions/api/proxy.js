@@ -1,27 +1,24 @@
-export async function onRequestGet({ request }) {
+export async function onRequestGet({ request, env }) {
   const { searchParams } = new URL(request.url);
-  const targetUrl = searchParams.get("url");
+  const id = searchParams.get("id");
 
-  if (!targetUrl) {
-    return new Response("❌ Missing url parameter", { status: 400 });
+  if (!id) {
+    return new Response("Missing id", { status: 400 });
   }
 
-  try {
-    const res = await fetch(targetUrl);
+  const url = await env.FILES_M4.get(id);
+  if (!url) {
+    return new Response("File not found", { status: 404 });
+  }
 
-    if (!res.ok) {
-      return new Response("❌ Failed to fetch target file", { status: res.status });
+  const res = await fetch(url);
+  if (!res.ok) {
+    return new Response("Upstream fetch failed", { status: 502 });
+  }
+
+  return new Response(res.body, {
+    headers: {
+      "Content-Type": res.headers.get("Content-Type") || "application/octet-stream"
     }
-
-    // Clone headers but drop unsafe ones
-    const headers = new Headers(res.headers);
-    headers.set("Access-Control-Allow-Origin", "*");
-    headers.delete("content-security-policy");
-    headers.delete("content-security-policy-report-only");
-    headers.delete("clear-site-data");
-
-    return new Response(res.body, { headers });
-  } catch (err) {
-    return new Response("❌ Proxy error: " + err.message, { status: 500 });
-  }
+  });
 }
