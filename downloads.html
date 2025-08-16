@@ -1,67 +1,44 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <title>Download & Extract</title>
-  <link rel="stylesheet" href="style.css">
-  <script src="https://cdn.jsdelivr.net/npm/fflate/umd/index.js"></script>
-</head>
-<body>
-  <div id="download-container">
-    <h2>Download File</h2>
-    <input type="text" id="fileId" placeholder="Enter file ID (e.g., M5a)">
-    <button id="fetchBtn">Fetch & Download</button>
-  </div>
+<script src="https://gildas-lormeau.github.io/zip.js/demos/zip-no-worker.min.js"></script>
+<script>
+async function downloadAndExtract(fileId, password) {
+  try {
+    // Step 1: fetch file URL from KV
+    const res = await fetch(`/api/file?id=${fileId}`);
+    const { url } = await res.json();
 
-  <script>
-    const fetchBtn = document.getElementById("fetchBtn");
+    // Step 2: proxy download
+    const proxyRes = await fetch(`/api/proxy?url=${encodeURIComponent(url)}`);
+    if (!proxyRes.ok) throw new Error("Failed to fetch file");
+    const blob = await proxyRes.blob();
 
-    fetchBtn.addEventListener("click", async () => {
-      const fileId = document.getElementById("fileId").value.trim();
-      if (!fileId) {
-        alert("Enter a file ID first!");
-        return;
-      }
+    // Step 3: open ZIP with password
+    const reader = new zip.ZipReader(new zip.BlobReader(blob));
+    const entries = await reader.getEntries();
 
-      try {
-        // Step 1: Get the file link from your API
-        const res = await fetch(`/api/file?id=${encodeURIComponent(fileId)}`);
-        if (!res.ok) throw new Error("File not found!");
-        const data = await res.json();
-        const fileUrl = data.url;
+    for (let entry of entries) {
+      if (entry.filename.endsWith("/")) continue; // skip folders
 
-        // Step 2: Ask for password
-        const password = prompt("Enter ZIP password:");
-        if (!password) return;
+      const writer = new zip.BlobWriter();
+      const extracted = await entry.getData(writer, { password });
+      const fileBlob = await extracted;
 
-        // Step 3: Fetch ZIP via proxy
-        const zipRes = await fetch(`/api/proxy?url=${encodeURIComponent(fileUrl)}`);
-        if (!zipRes.ok) throw new Error("Failed to fetch ZIP");
-        const zipArrayBuffer = await zipRes.arrayBuffer();
+      // Offer download to user
+      const link = document.createElement("a");
+      link.href = URL.createObjectURL(fileBlob);
+      link.download = entry.filename;
+      link.click();
+    }
 
-        // Step 4: Decrypt + extract
-        const zipBytes = new Uint8Array(zipArrayBuffer);
-        const unzipped = fflate.unzipSync(zipBytes, { password: password });
+    await reader.close();
+  } catch (err) {
+    alert("❌ Extraction failed: " + err.message);
+  }
+}
 
-        // Step 5: Auto-download extracted files
-        for (const [filename, content] of Object.entries(unzipped)) {
-          const blob = new Blob([content], { type: "application/octet-stream" });
-          const url = URL.createObjectURL(blob);
-          const a = document.createElement("a");
-          a.href = url;
-          a.download = filename;
-          document.body.appendChild(a);
-          a.click();
-          a.remove();
-          URL.revokeObjectURL(url);
-        }
-
-        alert("✅ Extraction complete. Files downloaded.");
-      } catch (err) {
-        console.error(err);
-        alert("❌ Error: " + err.message);
-      }
-    });
-  </script>
-</body>
-</html>
+// Example: after user enters fileId + password
+document.getElementById("downloadBtn").addEventListener("click", () => {
+  const fileId = document.getElementById("fileId").value.trim();
+  const password = document.getElementById("zipPass").value.trim();
+  downloadAndExtract(fileId, password);
+});
+</script>
